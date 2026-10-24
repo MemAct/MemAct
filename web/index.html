@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="memact-token" content="__SESSION_TOKEN__">
+  <meta name="theme-color" content="#00011B">
+  <title>MemAct</title>
+  <link rel="icon" href="/assets/icon-dark.png">
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="header-start"><a href="/" aria-label="MemAct home" class="brand"><img src="/assets/header-transparent.png" alt="MemAct"></a></div>
+    <div class="top-actions">
+      <button id="import-button" class="quiet">Import JSON</button>
+      <button id="record-button" class="primary">Record</button>
+      <button id="stop-button" class="primary" hidden>Stop recording</button>
+    </div>
+  </header>
+  <div class="workspace">
+    <aside id="recording-history" class="library" aria-label="Recordings">
+      <button id="rail-search" class="quiet rail-button" aria-label="Search saved recordings" title="Search recordings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4.5 4.5"/></svg></button>
+      <label class="sr-only" for="library-search">Search recordings</label>
+      <div class="library-search-wrap">
+        <input id="library-search" type="search" placeholder="Find a recording" autocomplete="off">
+        <svg class="library-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true" focusable="false"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m15.5 15.5 4.5 4.5"></path></svg>
+      </div>
+      <button id="new-recording-button" class="new-recording-button primary" aria-label="New recording" title="New recording"><svg class="new-recording-plus" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true" focusable="false"><path d="M10 3v14M3 10h14"></path></svg><span>New recording</span></button>
+      <button id="rail-history" class="quiet rail-button" aria-label="Recording history" title="Recording history"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 11a9 9 0 1 1 2.6 7.3M3 5v6h6M12 7v5l3 2"/></svg></button>
+      <nav id="recording-list" aria-label="Saved recordings"></nav>
+      <p id="library-empty" class="muted">Recordings are saved here.</p>
+      <div class="library-bottom"><a class="test-link" href="/mock" target="_blank" rel="noopener">Local test page <span aria-hidden="true">↗</span></a><button id="toggle-history" class="quiet more-button" aria-label="Hide recording history" title="Hide recording history" aria-controls="recording-list" aria-expanded="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg></button></div>
+    </aside>
+    <main>
+      <section id="empty" class="empty">
+        <h2>No recordings yet</h2>
+        <p>Start a recording to view and edit its steps here.</p>
+        <button id="first-record" class="primary">Record a page</button>
+      </section>
+      <section id="editor" hidden>
+        <div class="editor-heading">
+          <div class="recording-name-wrap">
+            <label for="recording-name" class="sr-only">Recording name</label>
+            <div class="recording-title-row"><input id="recording-name" class="recording-name" maxlength="200" autocomplete="off"><button id="recording-options" class="quiet more-button" aria-label="Recording options" aria-haspopup="menu" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button></div>
+            <p id="recording-url" class="muted truncate"></p>
+          </div>
+          <span id="step-count" class="muted"></span>
+        </div>
+        <div class="tools">
+          <label class="sr-only" for="step-search">Search steps</label>
+          <div class="step-search-wrap">
+            <input id="step-search" type="search" placeholder="Search steps" autocomplete="off">
+            <svg class="step-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true" focusable="false"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m15.5 15.5 4.5 4.5"></path></svg>
+          </div>
+          <div class="selection-tools">
+            <label class="select-all"><input id="select-all" type="checkbox"> <span id="selection-count">Select all</span></label>
+            <button id="export-button" disabled>Export as</button>
+            <button id="replay-button" disabled>Replay</button>
+            <button id="rerecord-button" disabled>Re-record</button>
+            <button id="delete-button" class="quiet" disabled>Delete</button>
+          </div>
+        </div>
+        <div id="preparation" class="preparation" hidden>
+          <p id="preparation-copy"></p>
+          <div><button id="arm-button" class="primary">Record next action</button><button id="cancel-replacement">Cancel</button></div>
+        </div>
+        <div class="editor-body">
+          <div class="timeline-wrap">
+            <ol id="timeline" class="timeline" aria-label="Recorded steps"></ol>
+            <p id="no-matches" class="no-matches" hidden>No matching steps.</p>
+          </div>
+          <aside id="inspector" class="inspector" aria-label="Step details">
+            <div id="inspector-empty" class="inspector-empty">Select a step to see its screenshot.</div>
+            <div id="step-details" hidden>
+              <div class="preview-heading"><h2 id="detail-heading">Step</h2><button id="close-detail" class="quiet" aria-label="Close step details">×</button></div>
+              <button id="image-open" class="image-open" aria-label="Enlarge screenshot"><img id="detail-image" alt="Page after the recorded action"></button>
+              <p id="image-missing" class="muted" hidden>Screenshot unavailable.</p>
+              <p id="screenshot-caption" class="muted caption"></p>
+              <dl id="detail-fields"></dl>
+              <p id="detail-context" class="context"></p>
+              <button id="reset-label" class="quiet">Restore original label</button>
+            </div>
+          </aside>
+        </div>
+      </section>
+      <footer class="footer"><p id="message" role="status" aria-live="polite"></p><button id="cancel-replay" class="quiet" hidden>Cancel replay</button></footer>
+    </main>
+  </div>
+  <div id="recording-menu" class="recording-menu" role="menu" aria-label="Recording actions" hidden>
+    <button role="menuitem" data-action="rename">Rename</button>
+    <button role="menuitem" data-action="delete" class="danger">Delete recording</button>
+  </div>
+  <dialog id="export-dialog" aria-labelledby="export-heading">
+    <div class="dialog-heading"><h2 id="export-heading">Export selected steps as</h2></div>
+    <div class="export-formats"><button id="export-text">Plain English <span class="muted">.txt</span></button><button id="export-json">JSON <span class="muted">.json</span></button></div>
+    <p id="export-error" class="error" role="alert" hidden></p>
+    <div class="dialog-actions"><button id="cancel-export">Cancel</button></div>
+  </dialog>
+  <dialog id="delete-steps-dialog" aria-labelledby="delete-steps-heading" aria-describedby="delete-steps-copy">
+    <form id="delete-steps-form">
+      <div class="dialog-heading"><h2 id="delete-steps-heading">Delete selected steps?</h2></div>
+      <p id="delete-steps-copy"></p>
+      <p id="delete-steps-error" class="error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" id="cancel-delete-steps">Cancel</button><button type="submit" id="confirm-delete-steps" class="danger">Delete steps</button></div>
+    </form>
+  </dialog>
+  <dialog id="recording-action-dialog" aria-labelledby="recording-action-heading">
+    <form id="recording-action-form">
+      <div class="dialog-heading"><h2 id="recording-action-heading">Rename recording</h2></div>
+      <label id="rename-label" for="rename-recording">Name</label>
+      <input id="rename-recording" maxlength="200" required autocomplete="off">
+      <p id="delete-recording-copy" hidden></p>
+      <p id="recording-action-error" class="error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" id="cancel-recording-action">Cancel</button><button type="submit" id="save-recording-action" class="primary">Save</button></div>
+    </form>
+  </dialog>
+  <dialog id="record-dialog">
+    <form id="record-form" novalidate>
+      <div class="dialog-heading"><h2>New recording</h2><button type="button" class="quiet close-record" aria-label="Close">×</button></div>
+      <label for="new-title">Name <span class="muted">(optional)</span></label>
+      <input id="new-title" maxlength="200" placeholder="Weekly report" autocomplete="off">
+      <label for="new-url">Page URL</label>
+      <input id="new-url" type="text" inputmode="url" placeholder="example.com" required autocomplete="off" autocapitalize="none" spellcheck="false" aria-describedby="record-error">
+      <p id="record-error" class="error" role="alert" hidden></p>
+      <p class="muted small">Note: A separate browser opens for recording, and password fields are excluded.</p>
+      <div class="dialog-actions"><button type="button" id="use-mock" class="quiet">Use local test page</button><button type="submit" id="start-button" class="primary">Start recording</button></div>
+    </form>
+  </dialog>
+  <dialog id="confirm-dialog">
+    <div class="dialog-heading"><h2>Replay this action?</h2></div>
+    <p id="confirm-label" class="confirm-label"></p>
+    <dl id="confirm-fields"></dl>
+    <p id="confirm-reason" class="muted small"></p>
+    <div id="file-reselection" hidden>
+      <label for="replay-files">Select the original files</label>
+      <p id="expected-files" class="small muted"></p>
+      <input id="replay-files" type="file" multiple>
+      <p class="small muted">File contents are used for this replay only.</p>
+    </div>
+    <p id="confirm-error" class="error" role="alert" hidden></p>
+    <div class="dialog-actions"><button id="confirm-cancel">Cancel replay</button><button id="confirm-continue" class="primary">Continue</button></div>
+  </dialog>
+  <dialog id="image-dialog" class="image-dialog"><button id="close-image" class="quiet" aria-label="Close screenshot">Close</button><img id="full-image" alt="Recorded screenshot"></dialog>
+  <input id="import-file" type="file" accept="application/json,.json" hidden>
+</body>
+</html>
