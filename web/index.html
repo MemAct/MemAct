@@ -42,8 +42,7 @@
       <section id="editor" hidden>
         <div class="editor-heading">
           <div class="recording-name-wrap">
-            <label for="recording-name" class="sr-only">Recording name</label>
-            <div class="recording-title-row"><input id="recording-name" class="recording-name" maxlength="200" autocomplete="off"><button id="recording-options" class="quiet more-button" aria-label="Recording options" aria-haspopup="menu" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button></div>
+            <div class="recording-title-row"><h2 id="recording-name" class="recording-name" aria-label="Recording name"></h2><button id="recording-options" class="quiet more-button" aria-label="Recording options" aria-haspopup="menu" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button></div>
             <p id="recording-url" class="muted truncate"></p>
           </div>
           <span id="step-count" class="muted"></span>
@@ -58,7 +57,7 @@
             <label class="select-all"><input id="select-all" type="checkbox"> <span id="selection-count">Select all</span></label>
             <button id="export-button" disabled>Export as</button>
             <button id="replay-button" disabled>Replay</button>
-            <button id="rerecord-button" disabled>Re-record</button>
+            <button id="rename-step-button" disabled>Rename</button>
             <button id="delete-button" class="quiet" disabled>Delete</button>
           </div>
         </div>
@@ -90,17 +89,27 @@
   </div>
   <div id="recording-menu" class="recording-menu" role="menu" aria-label="Recording actions" hidden>
     <button role="menuitem" data-action="rename">Rename</button>
+    <button role="menuitem" data-action="rerecord">Re-record</button>
     <button role="menuitem" data-action="delete" class="danger">Delete recording</button>
   </div>
+  <dialog id="rename-step-dialog" aria-labelledby="rename-step-heading">
+    <form id="rename-step-form">
+      <div class="dialog-heading"><h2 id="rename-step-heading">Rename step</h2><button type="button" class="quiet dialog-close" data-close-dialog="rename-step-dialog" aria-label="Close step rename">×</button></div>
+      <label for="rename-step-label">Step title</label>
+      <input id="rename-step-label" maxlength="2000" autocomplete="off">
+      <p id="rename-step-error" class="error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" id="cancel-rename-step">Cancel</button><button type="submit" id="save-rename-step" class="primary">Save</button></div>
+    </form>
+  </dialog>
   <dialog id="export-dialog" aria-labelledby="export-heading">
-    <div class="dialog-heading"><h2 id="export-heading">Export selected steps as</h2></div>
+    <div class="dialog-heading"><h2 id="export-heading">Export selected steps as</h2><button type="button" class="quiet dialog-close" data-close-dialog="export-dialog" aria-label="Close export">×</button></div>
     <div class="export-formats"><button id="export-text">Plain English <span class="muted">.txt</span></button><button id="export-json">JSON <span class="muted">.json</span></button></div>
     <p id="export-error" class="error" role="alert" hidden></p>
     <div class="dialog-actions"><button id="cancel-export">Cancel</button></div>
   </dialog>
   <dialog id="delete-steps-dialog" aria-labelledby="delete-steps-heading" aria-describedby="delete-steps-copy">
     <form id="delete-steps-form">
-      <div class="dialog-heading"><h2 id="delete-steps-heading">Delete selected steps?</h2></div>
+      <div class="dialog-heading"><h2 id="delete-steps-heading">Delete selected steps?</h2><button type="button" class="quiet dialog-close" data-close-dialog="delete-steps-dialog" aria-label="Close delete steps">×</button></div>
       <p id="delete-steps-copy"></p>
       <p id="delete-steps-error" class="error" role="alert" hidden></p>
       <div class="dialog-actions"><button type="button" id="cancel-delete-steps">Cancel</button><button type="submit" id="confirm-delete-steps" class="danger">Delete steps</button></div>
@@ -108,7 +117,7 @@
   </dialog>
   <dialog id="recording-action-dialog" aria-labelledby="recording-action-heading">
     <form id="recording-action-form">
-      <div class="dialog-heading"><h2 id="recording-action-heading">Rename recording</h2></div>
+      <div class="dialog-heading"><h2 id="recording-action-heading">Rename recording</h2><button type="button" class="quiet dialog-close" data-close-dialog="recording-action-dialog" aria-label="Close recording action">×</button></div>
       <label id="rename-label" for="rename-recording">Name</label>
       <input id="rename-recording" maxlength="200" required autocomplete="off">
       <p id="delete-recording-copy" hidden></p>
@@ -118,7 +127,7 @@
   </dialog>
   <dialog id="record-dialog">
     <form id="record-form" novalidate>
-      <div class="dialog-heading"><h2>New recording</h2><button type="button" class="quiet close-record" aria-label="Close">×</button></div>
+      <div class="dialog-heading"><h2>New recording</h2><button type="button" class="quiet dialog-close" data-close-dialog="record-dialog" aria-label="Close new recording">×</button></div>
       <label for="new-title">Name <span class="muted">(optional)</span></label>
       <input id="new-title" maxlength="200" placeholder="Weekly report" autocomplete="off">
       <label for="new-url">Page URL</label>
@@ -129,7 +138,7 @@
     </form>
   </dialog>
   <dialog id="confirm-dialog">
-    <div class="dialog-heading"><h2>Replay this action?</h2></div>
+    <div class="dialog-heading"><h2>Replay this action?</h2><button type="button" id="close-replay" class="quiet dialog-close" aria-label="Close and cancel replay">×</button></div>
     <p id="confirm-label" class="confirm-label"></p>
     <dl id="confirm-fields"></dl>
     <p id="confirm-reason" class="muted small"></p>
@@ -142,7 +151,7 @@
     <p id="confirm-error" class="error" role="alert" hidden></p>
     <div class="dialog-actions"><button id="confirm-cancel">Cancel replay</button><button id="confirm-continue" class="primary">Continue</button></div>
   </dialog>
-  <dialog id="image-dialog" class="image-dialog"><button id="close-image" class="quiet" aria-label="Close screenshot">Close</button><img id="full-image" alt="Recorded screenshot"></dialog>
+  <dialog id="image-dialog" class="image-dialog"><button type="button" id="close-image" class="quiet dialog-close" data-close-dialog="image-dialog" aria-label="Close screenshot">×</button><img id="full-image" alt="Recorded screenshot"></dialog>
   <input id="import-file" type="file" accept="application/json,.json" hidden>
 </body>
 </html>

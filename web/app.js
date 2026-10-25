@@ -16,6 +16,7 @@ let recordingAction = null;
 let actionRecordingId = null;
 let stepDeletion = null;
 let exportRequest = null;
+let stepRename = null;
 
 function setHistoryCollapsed(collapsed) {
   document.querySelector(".workspace").classList.toggle("history-collapsed", collapsed);
@@ -118,14 +119,14 @@ $("recording-menu").addEventListener("click", event => {
   actionRecordingId = item.id; recordingAction = action;
   closeRecordingMenu();
   const rename = action === "rename";
-  $("recording-action-heading").textContent = rename ? "Rename recording" : "Delete recording?";
+  $("recording-action-heading").textContent = rename ? "Rename recording" : action === "rerecord" ? "Re-record entire recording?" : "Delete recording?";
   $("rename-label").hidden = !rename;
   $("rename-recording").hidden = !rename;
   $("rename-recording").disabled = !rename;
   $("rename-recording").value = item.title;
   $("delete-recording-copy").hidden = rename;
-  $("delete-recording-copy").textContent = `“${item.title}” and all its steps will be permanently deleted.`;
-  $("save-recording-action").textContent = rename ? "Save" : "Delete recording";
+  $("delete-recording-copy").textContent = action === "rerecord" ? `Start again from the original page and replace all steps in “${item.title}”.` : `“${item.title}” and all its steps will be permanently deleted.`;
+  $("save-recording-action").textContent = rename ? "Save" : action === "rerecord" ? "Start re-recording" : "Delete recording";
   $("save-recording-action").className = rename ? "primary" : "danger";
   $("recording-action-error").hidden = true;
   $("recording-action-dialog").showModal();
@@ -139,6 +140,9 @@ $("recording-action-form").addEventListener("submit", async event => {
   try {
     if (recordingAction === "rename") {
       await api(`/api/recordings/${actionRecordingId}/edit`, {title: $("rename-recording").value});
+    } else if (recordingAction === "rerecord") {
+      await api(`/api/recordings/${actionRecordingId}/rerecord`, {});
+      currentId = actionRecordingId; selected.clear(); focusedStep = null;
     } else {
       await api(`/api/recordings/${actionRecordingId}/remove`, {});
     }
@@ -188,19 +192,17 @@ async function loadRecording(id, preserve = false) {
   selected = new Set([...selected].filter(id => recording.steps.some(step => step.id === id)));
   $("empty").hidden = true;
   $("editor").hidden = false;
-  if (document.activeElement !== $("recording-name")) $("recording-name").value = recording.title;
+  $("recording-name").textContent = recording.title;
   $("recording-url").textContent = recording.start_url;
   $("step-count").textContent = `${recording.steps.length} ${recording.steps.length === 1 ? "step" : "steps"}`;
   renderLibrary(); renderTimeline(); renderDetails(); updateControls();
 }
 
 function renderTimeline() {
-  const activeInput = document.activeElement;
-  if (activeInput?.classList.contains("step-label")) return;
   const fragment = document.createDocumentFragment();
   for (const step of shownSteps()) {
     const index = recording.steps.indexOf(step) + 1;
-    const row = element("li", "step" + (focusedStep === step.id ? " active" : ""));
+    const row = element("li", "step" + (selected.has(step.id) ? " active" : ""));
     row.dataset.id = step.id;
     const checkbox = element("input");
     checkbox.type = "checkbox"; checkbox.checked = selected.has(step.id);
@@ -208,22 +210,18 @@ function renderTimeline() {
     checkbox.addEventListener("click", event => event.stopPropagation());
     checkbox.addEventListener("change", () => {
       checkbox.checked ? selected.add(step.id) : selected.delete(step.id);
-      focusedStep = step.id; renderDetails(); updateControls();
+      focusedStep = checkbox.checked ? step.id : (focusedStep === step.id ? null : focusedStep);
+      row.classList.toggle("active", checkbox.checked);
+      renderDetails(); updateControls();
     });
     const content = element("div", "step-content");
-    const input = element("input", "step-label");
-    input.value = stepLabel(step); input.maxLength = 2000;
-    input.setAttribute("aria-label", `Label for step ${index}`);
-    input.disabled = !idle();
-    input.addEventListener("focus", () => {focusedStep = step.id; renderDetails();});
-    input.addEventListener("click", event => event.stopPropagation());
-    input.addEventListener("keydown", event => {if (event.key === "Enter") input.blur();});
-    input.addEventListener("change", () => run(async () => {
-      await api(`/api/recordings/${currentId}/edit`, {step_id: step.id, label: input.value});
-      await loadRecording(currentId, true);
-    }));
+    const titleRow = element("div", "step-title-row");
+    const title = element("span", "step-label", stepLabel(step));
+    title.setAttribute("aria-label", `Label for step ${index}`);
+    title.title = stepLabel(step);
+    titleRow.append(title);
     const location = step.frame.length ? `Frame · ${step.page.title || step.page.id}` : step.page.title || step.page.id;
-    content.append(input, element("div", "step-meta", `${step.action.type.replaceAll("_", " ")} · ${location}`));
+    content.append(titleRow, element("div", "step-meta", `${step.action.type.replaceAll("_", " ")} · ${location}`));
     row.append(checkbox, element("span", "step-index", String(index)), content);
     if (step.screenshot?.data_url) {
       const image = element("img", "step-thumb");
@@ -231,8 +229,8 @@ function renderTimeline() {
       row.append(image);
     } else row.append(element("span", "step-no-thumb", step.screenshot?.status === "pending" ? "Capturing" : "No image"));
     row.addEventListener("click", () => {
-      focusedStep = step.id;
       selected.has(step.id) ? selected.delete(step.id) : selected.add(step.id);
+      focusedStep = selected.has(step.id) ? step.id : null;
       renderTimeline(); renderDetails(); updateControls();
     });
     fragment.append(row);
@@ -240,6 +238,32 @@ function renderTimeline() {
   $("timeline").replaceChildren(fragment);
   $("no-matches").hidden = shownSteps().length > 0;
 }
+
+$("rename-step-button").addEventListener("click", () => {
+  if (!idle() || selected.size !== 1) return;
+  const step = recording.steps.find(step => selected.has(step.id));
+  if (!step) return;
+  stepRename = {recordingId: currentId, stepId: step.id};
+  $("rename-step-heading").textContent = `Rename step ${recording.steps.indexOf(step) + 1}`;
+  $("rename-step-label").value = stepLabel(step);
+  $("rename-step-error").hidden = true;
+  $("rename-step-dialog").showModal();
+  $("rename-step-label").focus(); $("rename-step-label").select();
+});
+$("cancel-rename-step").addEventListener("click", () => $("rename-step-dialog").close());
+$("rename-step-dialog").addEventListener("close", () => {stepRename = null;});
+$("rename-step-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  if (!stepRename) return;
+  const request = stepRename;
+  $("save-rename-step").disabled = true;
+  try {
+    await api(`/api/recordings/${request.recordingId}/edit`, {step_id: request.stepId, label: $("rename-step-label").value});
+    $("rename-step-dialog").close(); await refresh(true);
+  } catch (error) {
+    $("rename-step-error").textContent = error.message; $("rename-step-error").hidden = false;
+  } finally {$("save-rename-step").disabled = false;}
+});
 
 function fields(container, entries) {
   container.replaceChildren();
@@ -277,11 +301,10 @@ function updateControls() {
   $("record-button").disabled = !isIdle;
   $("new-recording-button").disabled = !isIdle;
   $("import-button").disabled = !isIdle;
-  $("recording-name").disabled = !isIdle;
   if (!isIdle) closeRecordingMenu();
   $("replay-button").disabled = !isIdle || !selected.size;
   $("delete-button").disabled = !isIdle || !selected.size;
-  $("rerecord-button").disabled = !isIdle || selected.size !== 1;
+  $("rename-step-button").disabled = !isIdle || selected.size !== 1;
   $("export-button").disabled = !selected.size;
   $("selection-count").textContent = selected.size ? `${selected.size} selected` : "Select all";
   const visible = shownSteps();
@@ -358,7 +381,9 @@ function showRecord() {
 $("record-button").addEventListener("click", showRecord);
 $("new-recording-button").addEventListener("click", showRecord);
 $("first-record").addEventListener("click", showRecord);
-document.querySelector(".close-record").addEventListener("click", () => $("record-dialog").close());
+for (const button of document.querySelectorAll("[data-close-dialog]")) {
+  button.addEventListener("click", () => $(button.dataset.closeDialog).close());
+}
 $("use-mock").addEventListener("click", () => {$("new-url").value = location.origin + "/mock"; $("new-title").value = "Local test";});
 $("new-url").addEventListener("input", () => {$("record-error").hidden = true;});
 $("record-form").addEventListener("submit", async event => {
@@ -379,7 +404,6 @@ $("select-all").addEventListener("change", event => {
   for (const step of shownSteps()) event.target.checked ? selected.add(step.id) : selected.delete(step.id);
   renderTimeline(); updateControls();
 });
-$("recording-name").addEventListener("change", () => run(async () => {await api(`/api/recordings/${currentId}/edit`, {title: $("recording-name").value});}));
 $("delete-button").addEventListener("click", () => {
   if (!idle() || !selected.size) return;
   stepDeletion = {recordingId: currentId, ids: [...selected]};
@@ -410,13 +434,11 @@ $("delete-steps-form").addEventListener("submit", async event => {
   } finally {$("confirm-delete-steps").disabled = false;}
 });
 $("replay-button").addEventListener("click", () => run(async () => {await api("/api/replay/start", {recording_id: currentId, ids: [...selected]});}));
-$("rerecord-button").addEventListener("click", () => run(async () => {await api("/api/rerecord/prepare", {recording_id: currentId, step_id: [...selected][0]});}));
 $("arm-button").addEventListener("click", () => run(async () => {await api("/api/rerecord/arm", {});}));
 $("cancel-replacement").addEventListener("click", () => run(async () => {await api("/api/record/stop", {});}));
 $("reset-label").addEventListener("click", () => run(async () => {await api(`/api/recordings/${currentId}/edit`, {step_id: focusedStep, label: null});}));
 $("close-detail").addEventListener("click", () => {focusedStep = null; renderTimeline(); renderDetails();});
 $("image-open").addEventListener("click", () => {$("full-image").src = $("detail-image").src; $("image-dialog").showModal();});
-$("close-image").addEventListener("click", () => $("image-dialog").close());
 
 async function exportSelection(format) {
   if (!exportRequest) return;
@@ -475,6 +497,7 @@ $("confirm-continue").addEventListener("click", async () => {
 });
 const cancelReplay = () => run(async () => {await api("/api/replay/cancel", {});});
 $("confirm-cancel").addEventListener("click", cancelReplay);
+$("close-replay").addEventListener("click", cancelReplay);
 $("cancel-replay").addEventListener("click", cancelReplay);
 $("confirm-dialog").addEventListener("cancel", event => {event.preventDefault(); cancelReplay();});
 refresh(true);

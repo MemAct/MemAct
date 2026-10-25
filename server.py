@@ -203,6 +203,16 @@ async def rerecord(request):
     return web.json_response({"ok": True})
 
 
+async def rerecord_entire(request):
+    await body(request)
+    async with request.app[LOCK]:
+        session = request.app[SESSION]
+        session.require_idle()
+        recording = request.app[STORE].get(request.match_info["recording_id"])
+        result = await session.start_recording(recording["start_url"], recording["title"], replace_id=recording["id"])
+    return web.json_response({"id": result["id"]})
+
+
 async def arm(request):
     await request.app[SESSION].arm_replacement()
     return web.json_response({"ok": True})
@@ -229,6 +239,7 @@ def create_app(data_dir=None, headless=False, port=8765):
     app.router.add_post("/api/recordings/{recording_id}/edit", edit)
     app.router.add_post("/api/recordings/{recording_id}/delete", delete_steps)
     app.router.add_post("/api/recordings/{recording_id}/remove", delete_recording)
+    app.router.add_post("/api/recordings/{recording_id}/rerecord", rerecord_entire)
     app.router.add_post("/api/recordings/{recording_id}/export", export)
     app.router.add_post("/api/import", import_recording)
     app.router.add_post("/api/record/start", start)

@@ -84,6 +84,7 @@ async def test_recording_menus_rename_cancel_and_delete(local):
     assert app[STORE].get(first["id"])["title"] == "Renamed report"
     assert "Renamed report" in (app[STORE].directory / f'{first["id"]}.json').read_text()
     await row.locator(".recording-link").click()
+    assert await page.locator("#recording-name").evaluate("el => el.tagName === 'H2' && !el.isContentEditable")
     await page.locator("#recording-options").click()
     await page.get_by_role("menuitem", name="Delete recording").click()
     await page.locator("#cancel-recording-action").click()
@@ -102,7 +103,7 @@ async def test_recording_menus_rename_cancel_and_delete(local):
     assert first["id"] not in app[STORE].recordings
     assert not (app[STORE].directory / f'{first["id"]}.json').exists()
     assert app[STORE].get(second["id"])
-    await page.wait_for_function("() => document.querySelector('#recording-name').value === 'Another recording'")
+    await page.wait_for_function("() => document.querySelector('#recording-name').textContent === 'Another recording'")
     session.mode = "recording"
     headers = {"X-MemAct-Token": app[TOKEN], "Origin": str(server.make_url("")).rstrip("/")}
     async with aiohttp.ClientSession(headers=headers) as client:
@@ -164,16 +165,31 @@ async def test_ui_search_edit_and_xss_are_safe(local):
     assert await page.evaluate("window.__xss === undefined")
     await page.get_by_label("Search steps", exact=True).fill("October")
     assert await page.locator("#timeline li").count() == 1
-    await page.get_by_label("Label for step 2", exact=True).fill("Get the report")
+    assert await page.locator("#rename-step-button").is_disabled()
+    await page.get_by_label("Select step 2", exact=True).check()
+    assert await page.locator("#rename-step-button").is_enabled()
+    assert await page.get_by_label("Label for step 2", exact=True).evaluate("el => el.tagName === 'SPAN' && !el.isContentEditable")
+    await page.locator("#rename-step-button").click()
+    await page.get_by_label("Step title", exact=True).fill("Discarded rename")
+    await page.locator("#cancel-rename-step").click()
+    assert recording["steps"][1]["label"]["custom"] == "Download October report"
+    await page.locator("#rename-step-button").click()
+    await page.keyboard.press("Escape")
+    assert await page.locator("#rename-step-dialog").is_hidden()
+    await page.locator("#rename-step-button").click()
+    await page.get_by_label("Step title", exact=True).fill("Get the report")
     async with page.expect_response(lambda response: response.url.endswith("/edit")) as saved:
-        await page.get_by_label("Label for step 2", exact=True).press("Enter")
+        await page.get_by_label("Step title", exact=True).press("Enter")
     assert (await saved.value).status == 200
     assert recording["steps"][1]["label"]["custom"] == "Get the report"
     await page.reload()
     await page.get_by_label("Recording name", exact=True).wait_for()
-    assert await page.get_by_label("Label for step 2", exact=True).input_value() == "Get the report"
+    assert await page.get_by_label("Label for step 2", exact=True).inner_text() == "Get the report"
     await page.get_by_label("Search recordings", exact=True).fill("No match")
     assert await page.locator("#recording-list button").count() == 0
+    await page.get_by_label("Select step 1", exact=True).check()
+    await page.get_by_label("Select step 2", exact=True).check()
+    assert await page.locator("#rename-step-button").is_disabled()
     assert not errors
 
 
@@ -349,3 +365,87 @@ async def test_long_history_and_timeline_scroll_independently(local):
     await page.get_by_role("button", name="New recording", exact=True).click()
     assert await page.get_by_role("dialog").is_visible()
     assert await page.get_by_label("Page URL", exact=True).is_visible()
+
+async def test_selection_highlight_clears_and_rerecord_replaces_entire_recording(local):
+    app, server = local
+    recording = new_recording(str(server.make_url('/mock')), 'Original recording')
+    old = make_step({'action': {'type': 'navigate', 'url': recording['start_url'], 'mode': 'goto'}},
+        {'id': 'p1', 'url': recording['start_url'], 'title': 'Sample workspace'}, [])
+    recording['steps'] = [old]
+    app[STORE].save(recording)
+    session = app[SESSION]
+    await session.ensure_browser()
+    page = await session.browser.new_page()
+    await page.goto(str(server.make_url('/')))
+    checkbox = page.get_by_label('Select step 1', exact=True)
+    await checkbox.check()
+    assert await page.locator('.step').evaluate("el => el.classList.contains('active')")
+    await checkbox.uncheck()
+    assert not await page.locator('.step').evaluate("el => el.classList.contains('active')")
+    assert await page.locator('#rename-step-button').is_disabled()
+    await page.locator('.step-label').click()
+    assert await checkbox.is_checked()
+    await checkbox.uncheck()
+    assert not await page.locator('.step').evaluate("el => el.classList.contains('active')")
+    await page.locator('#select-all').check()
+    await page.locator('#select-all').uncheck()
+    assert await page.locator('.step.active').count() == 0
+    assert await page.locator('#rerecord-button').count() == 0
+    await page.locator('#recording-options').click()
+    await page.get_by_role('menuitem', name='Re-record', exact=True).click()
+    await page.get_by_role('dialog', name='Re-record entire recording?').wait_for()
+    await page.locator('#cancel-recording-action').click()
+    assert app[STORE].get(recording['id'])['steps'] == [old]
+    await page.locator('#recording-options').click()
+    await page.get_by_role('menuitem', name='Re-record', exact=True).click()
+    async with page.expect_response(lambda r: r.url.endswith('/rerecord')) as started:
+        await page.locator('#save-recording-action').click()
+    assert (await started.value).status == 200
+    await session.queue.join()
+    replacement = app[STORE].get(recording['id'])
+    assert session.mode == 'recording'
+    assert replacement['id'] == recording['id'] and replacement['title'] == recording['title']
+    assert all(step['id'] != old['id'] for step in replacement['steps'])
+    assert len(app[STORE].recordings) == 1
+    target = session.pages['p1']
+    await target.get_by_label('Report name', exact=True).fill('New run')
+    await session.stop_recording()
+    assert any(step['action'].get('value') == 'New run' for step in replacement['steps'])
+    await page.close()
+
+async def test_popup_cross_controls_close_without_side_effects(recorded):
+    session, recording, target, app, server = recorded
+    await session.stop_recording()
+    opening = next(step for step in recording['steps'] if step['action']['type'] == 'navigate' and step['action'].get('mode') != 'observe')
+    opening_index = recording['steps'].index(opening) + 1
+    assert opening['screenshot']['data_url'].startswith('data:image/jpeg;base64,')
+    app[STORE].save(recording)
+    before = copy.deepcopy(recording)
+    page = await session.browser.new_page()
+    await page.goto(str(server.make_url('/')))
+    assert await page.locator('dialog').count() == await page.locator('dialog .dialog-close').count()
+    await page.locator('#new-recording-button').click()
+    await page.locator('#record-dialog .dialog-close').click()
+    assert await page.locator('#record-dialog').is_hidden()
+    await page.get_by_label(f'Select step {opening_index}', exact=True).check()
+    for trigger, dialog in [('export-button','export-dialog'), ('rename-step-button','rename-step-dialog'),
+                            ('delete-button','delete-steps-dialog'), ('image-open','image-dialog')]:
+        await page.locator('#'+trigger).click()
+        await page.locator('#'+dialog+' .dialog-close').click()
+        assert await page.locator('#'+dialog).is_hidden()
+    assert await page.locator('#close-image').inner_text() == '×'
+    for action in ['Rename', 'Re-record', 'Delete recording']:
+        await page.locator('#recording-options').click()
+        await page.get_by_role('menuitem', name=action, exact=True).click()
+        await page.locator('#recording-action-dialog .dialog-close').click()
+        assert await page.locator('#recording-action-dialog').is_hidden()
+    assert recording == before
+    await page.locator('#replay-button').click()
+    await page.locator('#confirm-dialog').wait_for()
+    await page.locator('#close-replay').click()
+    await page.locator('#confirm-dialog').wait_for(state='hidden')
+    await session.replay_task
+    assert session.mode == 'idle' and session.pending is None
+    assert 'cancelled' in session.message
+    assert recording == before
+    await page.close()

@@ -138,3 +138,12 @@ dialog,.recording-menu,details .menu,.preparation{border-color:var(--control-bor
 .export-formats button{flex:1;padding:14px 12px;text-align:left}
 .export-formats span{float:right;margin-left:12px;font-size:13px}
 @media(max-width:400px){.export-formats{flex-direction:column}}
+
+.recording-title-row .recording-name{overflow:hidden;white-space:nowrap;line-height:32px}
+
+.step-title-row{display:flex;align-items:center;gap:10px;min-width:0}
+.step-title-row .step-label{display:block;flex:1;min-width:0;overflow:hidden;white-space:nowrap;padding:0;border:0;cursor:default}
+
+.dialog-heading{gap:16px;align-items:flex-start}
+.dialog-heading .dialog-close,.image-dialog .dialog-close{display:flex;align-items:center;justify-content:center;flex-shrink:0;width:30px;height:30px;padding:0;font-size:24px;font-weight:400;line-height:1}
+.image-dialog .dialog-close{margin-left:auto}
