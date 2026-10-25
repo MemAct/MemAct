@@ -33,10 +33,10 @@ Optional arguments:
 ## Use
 
 1. Choose **New recording** below the sidebar search, or **Record** in the header, and enter a page URL and an optional name. Bare domains such as `google.com` use HTTPS automatically; localhost addresses use HTTP. **Use local test page** provides a safe mock workspace.
-2. Work in the Chromium window, then choose **Stop recording** in MemAct. Pending edits are flushed before saving. The browser stays open so you can prepare a subset or a replacement.
-3. Edit a step's label directly. Search matches labels, element names, page title, URL and nearby text. The sidebar search finds recording names and starting URLs.
-4. Select steps and choose **Export**, **Replay**, **Delete**, or **Re-record**. Export provides plain English or portable JSON, preserving recorded order. **Import JSON** restores an exported recording. `examples/report.json` contains a real recording of the local mock page that you can import to try the timeline.
-5. For **Re-record**, manually restore the browser to the state immediately before that step. Choose **Record next action**, then perform the replacement. Setup actions are excluded. Its ID and custom label are preserved; subsequent steps are unchanged and may need review.
+2. Work in the Chromium window, then choose **Stop recording** in MemAct. Pending edits are flushed before saving. The browser stays open so you can prepare a subset or a replacement. Closing the last recording tab or the browser also stops recording automatically and saves queued steps; closing one of several tabs keeps recording active.
+3. Select one step and choose **Rename** in the action toolbar to edit its title. Search matches labels, element names, page title, URL and nearby text. The sidebar search finds recording names and starting URLs.
+4. Select steps and choose **Export as**, **Replay**, **Rename**, or **Delete**. Export provides plain English or portable JSON, preserving recorded order. **Import JSON** restores an exported recording. `examples/report.json` contains a real recording of the local mock page that you can import to try the timeline.
+5. Choose **Re-record** from a recording's three-dot or right-click menu to replace its entire sequence. Confirm to start again at its original URL. The recording keeps its name and identity; its steps are replaced by the new run. Cancel leaves it unchanged, and a browser startup failure restores the previous steps.
 
 Screenshots are best-effort views captured **after** each action. Their capture URL and timestamp are stored independently. A navigation can complete before its screenshot is taken. Missing screenshots are marked unavailable.
 
@@ -60,7 +60,7 @@ Submit/delete/pay/send controls are flagged as risky. Other interactions have un
 
 Confirmation does not guarantee that a website will behave as expected. A successful click is not a business assertion. Cancellation stops future actions; it cannot undo ones already performed. Replay stops at the first failure.
 
-Full sequences begin with their recorded navigation. Selected subsets use the prepared browser and do not secretly run omitted steps. You are responsible for prerequisites such as login and earlier edits. Missing tabs and mismatched URLs stop replay.
+Full sequences ask for confirmation before opening the replay window, then begin with their recorded navigation. Selected subsets use the prepared browser and do not secretly run omitted steps. You are responsible for prerequisites such as login and earlier edits. Missing tabs and mismatched URLs stop replay.
 
 For file steps, select the original files in the replay confirmation. Names and sizes must match; this is not a content identity guarantee. File bytes exist in memory for the replay action and are not added to the recording. Up to 25 MB can be reselected per step. Clear-file-input actions do not need a file selection.
 

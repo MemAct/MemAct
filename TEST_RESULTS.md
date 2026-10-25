@@ -1,12 +1,12 @@
 # Local verification
 
-Verified on 24 October 2026 on Fedora Linux 44, with Python 3.12.14, Playwright 1.64.1 and its bundled Chromium.
+Verified on 25 October 2026 on Fedora Linux 44, with Python 3.12.14, Playwright 1.64.1 and its bundled Chromium.
 
 ## Automated checks
 
 ```text
 .venv/bin/python -m pytest -q
-61 passed in 131.77s (0:02:11)
+67 passed in 58.42s
 ```
 
 After the final typography change, the desktop/mobile visual contract test was rerun:
@@ -51,3 +51,11 @@ The local test page is the acceptance target. These checks do not establish univ
 Step deletion confirmation: the focused browser regression passed, covering singular/plural counts, Cancel, Escape, initial Cancel focus, deletion of only selected steps and absence of browser-native dialogs.
 
 Export dialog: the focused browser regression passed, verifying Cancel/Escape, both downloaded file formats, filename extensions and export of only selected steps. Downloads were accepted in a separate test-only browser context.
+
+Browser-close, title and replay updates: 28 browser/UI tests passed in 66.56 seconds. Checks cover saving queued steps when the last tab/browser closes, continuing with another tab open, starting a new recording afterward, menu-only title renaming, and confirming the opening navigation before creating a replay window. Live local replay also completed after Continue.
+
+Step title changes: verified read-only labels, the toolbar Rename button enabled for exactly one selected step, dialog Cancel/Escape, saved rename persistence and safe label rendering. The focused regression passed; the other 9 server/UI checks passed in the accompanying run.
+
+25 October 2026: reproduced stale selection highlighting in the live timeline, then verified that check/uncheck clears both checkbox state and row highlight. All 12 server/UI and focused rollback checks passed in 16.72s, including whole-recording Re-record confirmation/cancel, replacing steps under the same recording ID, new action capture and preserving prior steps on startup failure.
+
+Popup close controls: the focused browser test passed in 2.54s. Every dialog has one accessible cross control, including screenshot preview. Closing export, rename, deletion, new recording and whole-recording re-record dialogs leaves data unchanged; closing replay confirmation cancels replay.
