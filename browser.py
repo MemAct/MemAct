@@ -47,6 +47,7 @@ class BrowserSession:
         self.unmapped_event = asyncio.Event()
         self.replay_pages = {}
         self.dialog_failure = None
+        self.auto_stop_task = None
 
     def spawn(self, coroutine):
         task = asyncio.create_task(coroutine)
@@ -70,6 +71,7 @@ class BrowserSession:
             self.playwright = await async_playwright().start()
         if not self.browser or not self.browser.is_connected():
             self.browser = await self.playwright.chromium.launch(headless=self.headless, channel="chromium")
+            self.browser.on("disconnected", self.browser_disconnected)
         if not self.context:
             self.pages = {}
             self.page_ids = {}
@@ -77,6 +79,8 @@ class BrowserSession:
             self.last_action = {}
             self.last_navigation = {}
             self.context = await self.browser.new_context(viewport={"width": 1280, "height": 800}, accept_downloads=False)
+            context = self.context
+            context.on("close", lambda: self.context_closed(context))
             self.context.set_default_timeout(5000)
             await self.context.expose_binding("__memactEmit", self.binding)
             await self.context.add_init_script(script=SCRIPT)
@@ -192,6 +196,34 @@ class BrowserSession:
         if self.mode == "recording":
             await self.enqueue(page, page.main_frame, {
                 "action": {"type": "close_tab"}, "url": page.url, "title": "Closed tab"}, [])
+        if not self.context or not any(not tab.is_closed() for tab in self.context.pages):
+            self.request_auto_stop()
+
+    def context_closed(self, context):
+        if self.context is context:
+            self.context = None
+            self.request_auto_stop()
+
+    def browser_disconnected(self):
+        self.context = None
+        self.request_auto_stop()
+
+    def request_auto_stop(self):
+        if self.mode not in {"recording", "rerecording", "preparing"}:
+            return
+        if not self.auto_stop_task or self.auto_stop_task.done():
+            self.auto_stop_task = self.spawn(self.finish_closed_recording())
+
+    async def finish_closed_recording(self):
+        recording_id = self.recording_id
+        # Let sibling tab-close handlers enqueue their final observations first.
+        await asyncio.sleep(0)
+        await self.queue.join()
+        if self.recording_id == recording_id and self.mode in {"recording", "rerecording", "preparing"}:
+            self.mode = "idle"
+            self.replacement = None
+            self.drag_source = None
+            self.notice("Recording saved. The browser was closed.")
 
     async def navigation(self, page, frame):
         await self.ensure_capture(page)
@@ -305,14 +337,18 @@ class BrowserSession:
         except (PlaywrightError, ValueError):
             step["screenshot"] = {"status": "unavailable", "phase": "after", "data_url": None}
 
-    async def start_recording(self, url, title):
+    async def start_recording(self, url, title, *, replace_id=None):
         self.require_idle()
         validate_url(url)
+        previous = copy.deepcopy(self.store.get(replace_id)) if replace_id else None
         await self.queue.join()
         self.initializing = True
         try:
             await self.ensure_browser(fresh=True)
             recording = new_recording(url, title or "Untitled recording")
+            if previous:
+                recording["id"] = previous["id"]
+                recording["created_at"] = previous["created_at"]
             self.store.save(recording)
             self.recording_id = recording["id"]
             self.mode = "recording"
@@ -326,6 +362,8 @@ class BrowserSession:
             return recording
         except Exception:
             self.mode = "idle"
+            if previous:
+                self.store.save(previous)
             raise
         finally:
             self.initializing = False
@@ -452,13 +490,8 @@ class BrowserSession:
         try:
             # A full sequence starts from its own navigation. A subset can use the
             # existing prepared browser; missing tabs always stop explicitly.
-            if steps[0]["action"]["type"] == "navigate" and steps[0]["action"].get("mode") != "observe":
-                await self.ensure_browser(fresh=True)
-                page = await self.context.new_page()
-                self.unmapped_pages.clear()
-                self.replay_pages = {steps[0]["page"]["id"]: page}
-            else:
-                await self.ensure_browser()
+            starts_from_url = steps[0]["action"]["type"] == "navigate" and steps[0]["action"].get("mode") != "observe"
+            if not starts_from_url:
                 self.replay_pages = {key: value for key, value in self.pages.items() if not value.is_closed()}
                 self.unmapped_pages.clear()
                 if not self.replay_pages:
@@ -470,6 +503,13 @@ class BrowserSession:
                 if gate["confirm"]:
                     files = await self.wait_confirmation(step, gate)
                 self.mode = "replaying"
+                if index == 0 and starts_from_url:
+                    # Get approval before opening a foreground window, so a blank tab
+                    # cannot hide the confirmation waiting in MemAct.
+                    await self.ensure_browser(fresh=True)
+                    page = await self.context.new_page()
+                    self.unmapped_pages.clear()
+                    self.replay_pages = {step["page"]["id"]: page}
                 await self.perform(step, files)
                 if self.dialog_failure:
                     raise ValueError(self.dialog_failure)
